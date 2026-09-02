@@ -1,5 +1,8 @@
 # reconkit
 
+[![CI](https://github.com/caroline-jeffra/reconkit/actions/workflows/ci.yml/badge.svg)](https://github.com/caroline-jeffra/reconkit/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+
 A small toolkit of web-reconnaissance commands, packaged as an installable
 CLI and an importable Python library. Give it a CSV of domains and it probes
 each one; results are written as CSV or JSON.
@@ -14,6 +17,8 @@ each one; results are written as CSV or JSON.
 | `cf-subdomains`  | Enumerate A-record subdomains from a Cloudflare account  |
 
 ## Install & run (uv)
+
+Requires Python 3.11 or newer.
 
 ```bash
 uv sync                          # create venv, install reconkit + deps
@@ -75,3 +80,15 @@ Logic lives in `reconkit.commands` and `reconkit.core` as pure functions that
 return `ProbeResult` objects — no printing, no `argv`, no hardcoded paths. Only
 `cli.py` handles I/O and formatting. That split keeps the logic reusable and
 testable (see `tests/`, which mock HTTP and run offline).
+
+## Development
+
+```bash
+uv sync                      # includes dev dependencies
+uv run pytest --cov          # 98 tests, offline (all HTTP is mocked)
+uv run ruff check .          # lint
+uv run ruff format .         # format
+```
+
+CI runs the same three commands on Python 3.11–3.13, and separately builds the
+package and runs the installed wheel.
