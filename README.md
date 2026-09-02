@@ -18,9 +18,39 @@ each one; results are written as CSV or JSON.
 ```bash
 uv sync                          # create venv, install reconkit + deps
 uv run reconkit --help
-uv run reconkit wp-detect examples/domains.csv --format json -o results
-cat examples/domains.csv | uv run reconkit live-check -
+uv run reconkit wp-detect examples/wp-detect.csv --format json -o results
+cat examples/live-check.csv | uv run reconkit live-check -
 ```
+
+## Example inputs
+
+`examples/` holds one CSV per command that reads a domain list — bare domains,
+one per line, no header row. Each file is chosen to exercise that command's
+full range of outcomes, so you can see a positive and a negative on first run.
+
+| File                       | Command      | Shows                                             |
+|----------------------------|--------------|---------------------------------------------------|
+| `examples/live-check.csv`  | `live-check` | responding hosts, plus one that never resolves    |
+| `examples/wp-detect.csv`   | `wp-detect`  | WordPress sites and non-WordPress ones            |
+| `examples/wp-users.csv`    | `wp-users`   | sites that enumerate authors, and ones that don't |
+
+The `wp-users` list includes WordPress project sites that publish their
+authors through the REST API, so it returns a genuine positive.
+
+`cf-subdomains` takes no CSV — it reads zones from the Cloudflare API.
+
+Commands can be chained, feeding one command's results into the next with
+`--from`. Already-dead domains are skipped rather than re-probed:
+
+```bash
+uv run reconkit live-check examples/wp-users.csv -o results
+uv run reconkit wp-detect --from results/live_check.csv -o results
+uv run reconkit wp-users  --from results/wp_detect.csv -o results
+```
+
+These examples probe live third-party sites. Hosts that are hit repeatedly in
+quick succession may rate-limit, which is reported as `inconclusive` rather
+than mistaken for a negative.
 
 ## Use as a library
 
