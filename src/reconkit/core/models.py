@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 #: Column order for tabular output. Explicit so CSV headers are stable.
@@ -18,7 +18,7 @@ ROW_FIELDS: tuple[str, ...] = (
 )
 
 
-class Outcome(str, Enum):
+class Outcome(StrEnum):
     """Why a probe ended the way it did.
 
     The primary split is *did we get an HTTP answer at all*. INCONCLUSIVE sits on
