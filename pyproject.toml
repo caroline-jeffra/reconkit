@@ -3,6 +3,7 @@ name = "reconkit"
 version = "0.1.0"
 description = "A small toolkit of web-recon commands for auditing sites you own"
 readme = "README.md"
+authors = [{ name = "C. Jeffra" }]
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
