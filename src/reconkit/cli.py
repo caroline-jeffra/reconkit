@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from .commands import cloudflare_subdomains, live_check, wp_detect, wp_users
@@ -25,7 +23,7 @@ FromOpt = typer.Option(
 
 
 def _resolve_input(
-    source: Optional[str], from_csv: Optional[str], column: int
+    source: str | None, from_csv: str | None, column: int
 ) -> tuple[list[str], dict[str, str], list[ProbeResult]]:
     """Return (domains, schemes, carried-through SKIPPED rows).
 
@@ -65,10 +63,8 @@ def live_check_cmd(
 
 @app.command("wp-detect")
 def wp_detect_cmd(
-    source: Optional[str] = typer.Argument(
-        None, help="CSV of domains, or '-' for stdin."
-    ),
-    from_csv: Optional[str] = FromOpt,
+    source: str | None = typer.Argument(None, help="CSV of domains, or '-' for stdin."),
+    from_csv: str | None = FromOpt,
     column: int = typer.Option(0),
     out_dir: str = OutDirOpt,
     fmt: str = FormatOpt,
@@ -81,10 +77,8 @@ def wp_detect_cmd(
 
 @app.command("wp-users")
 def wp_users_cmd(
-    source: Optional[str] = typer.Argument(
-        None, help="CSV of domains, or '-' for stdin."
-    ),
-    from_csv: Optional[str] = FromOpt,
+    source: str | None = typer.Argument(None, help="CSV of domains, or '-' for stdin."),
+    from_csv: str | None = FromOpt,
     column: int = typer.Option(0),
     out_dir: str = OutDirOpt,
     fmt: str = FormatOpt,
@@ -97,7 +91,7 @@ def wp_users_cmd(
 
 @app.command("cf-subdomains")
 def cf_subdomains_cmd(
-    api_token: Optional[str] = typer.Option(
+    api_token: str | None = typer.Option(
         None,
         "--api-token",
         envvar="CLOUDFLARE_API_TOKEN",
