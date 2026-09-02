@@ -29,6 +29,10 @@ reports what an anonymous visitor could already see.
 That still makes real requests to real servers. You are responsible for
 having permission to send them.
 
+Found a security issue in `reconkit` itself? See [SECURITY.md](SECURITY.md).
+If the tool showed you a problem on someone *else's* site, report it to that
+site's owner — this repository is not a disclosure channel for third parties.
+
 | Command          | What it does                                             |
 |------------------|----------------------------------------------------------|
 | `live-check`     | Is the domain responding over HTTP?                      |
