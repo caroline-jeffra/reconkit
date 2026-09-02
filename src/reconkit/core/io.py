@@ -43,7 +43,7 @@ def read_upstream(source: str | Path, stage: str = "live-check") -> Upstream:
     schemes: dict[str, str] = {}
     dead: dict[str, str] = {}
 
-    with open(source, "r", encoding="utf-8", newline="") as fh:
+    with open(source, encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
             domain = (row.get("domain") or "").strip()
             if not domain:
@@ -62,7 +62,7 @@ def read_domains(source: str | Path, column: int = 0) -> list[str]:
     """Read domains from a CSV file or '-' for stdin. One domain per row, `column`-th field."""
     if str(source) == "-":
         return _parse_rows(sys.stdin, column)
-    with open(source, "r", encoding="utf-8", newline="") as fh:
+    with open(source, encoding="utf-8", newline="") as fh:
         return _parse_rows(fh, column)
 
 

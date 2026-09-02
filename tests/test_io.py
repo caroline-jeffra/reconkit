@@ -15,7 +15,6 @@ from reconkit.core.io import (
 )
 from reconkit.core.models import ROW_FIELDS, Outcome, ProbeResult
 
-
 # --- read_domains ----------------------------------------------------------
 
 def test_read_domains_one_per_row(tmp_path):
@@ -120,7 +119,7 @@ def test_read_upstream_stage_defaults_to_live_check(tmp_path):
 
 
 def test_dead_outcomes_are_exactly_the_unanswered_ones():
-    assert DEAD_OUTCOMES == {Outcome.ERROR.value, Outcome.TIMEOUT.value}
+    assert {Outcome.ERROR.value, Outcome.TIMEOUT.value} == DEAD_OUTCOMES
 
 
 # --- Upstream.skipped_results ---------------------------------------------

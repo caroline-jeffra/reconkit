@@ -6,7 +6,6 @@ import responses
 from reconkit.commands import cloudflare_subdomains, live_check, wp_detect, wp_users
 from reconkit.core.models import Outcome
 
-
 # --- live_check ------------------------------------------------------------
 
 @responses.activate

@@ -1,6 +1,5 @@
 """Tests for the shared result types."""
 
-import json
 
 from reconkit.core.models import ROW_FIELDS, Outcome, ProbeResult
 

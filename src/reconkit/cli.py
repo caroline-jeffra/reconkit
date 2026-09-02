@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Optional
 
 import typer
 
 from .commands import cloudflare_subdomains, live_check, wp_detect, wp_users
 from .core.io import read_domains, read_upstream, write_results
-from .core.models import Outcome, ProbeResult
+from .core.models import ProbeResult
 
 app = typer.Typer(help="A small toolkit of web-recon commands.", no_args_is_help=True)
 
