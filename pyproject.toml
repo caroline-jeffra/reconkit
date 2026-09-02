@@ -1,7 +1,7 @@
 [project]
 name = "reconkit"
 version = "0.1.0"
-description = "A small toolkit of web-recon commands relating to monitoring and management of WordPress sites"
+description = "A small toolkit of web-recon commands for auditing sites you own"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -16,11 +16,25 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Security",
+    "Typing :: Typed",
+]
+keywords = [
+    "reconnaissance",
+    "wordpress",
+    "cloudflare",
+    "dns",
+    "http",
+    "cli",
 ]
 dependencies = [
     "requests>=2.31",
     "typer>=0.13",
 ]
+
+[project.urls]
+Homepage = "https://github.com/caroline-jeffra/reconkit"
+Repository = "https://github.com/caroline-jeffra/reconkit"
+Issues = "https://github.com/caroline-jeffra/reconkit/issues"
 
 [project.scripts]
 reconkit = "reconkit.cli:app"
