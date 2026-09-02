@@ -18,24 +18,25 @@ DEAD_OUTCOMES = frozenset({Outcome.ERROR.value, Outcome.TIMEOUT.value})
 @dataclass
 class Upstream:
     """A previous command's results used to skip work on a chained run.
-    
+
     `schemes` are the answering scheme from last run. `dead` domains are not
     worth probing. Both are optional.
     """
 
-    domains:list[str]
+    domains: list[str]
     schemes: dict[str, str]
     dead: dict[str, str]
 
     def skipped_results(self) -> list[ProbeResult]:
         """Rows for the domains deliberately not probed.
-        
+
         Emitted for chained run row count consistency.
         """
         return [
             ProbeResult(domain, Outcome.SKIPPED, detail=reason)
             for domain, reason in self.dead.items()
         ]
+
 
 def read_upstream(source: str | Path, stage: str = "live-check") -> Upstream:
     """Read a previous command's result CSV."""
@@ -58,8 +59,12 @@ def read_upstream(source: str | Path, stage: str = "live-check") -> Upstream:
 
     return Upstream(domains=live, schemes=schemes, dead=dead)
 
+
 def read_domains(source: str | Path, column: int = 0) -> list[str]:
-    """Read domains from a CSV file or '-' for stdin. One domain per row, `column`-th field."""
+    """Read domains from a CSV file, or '-' for stdin.
+
+    One domain per row, taken from the `column`-th field.
+    """
     if str(source) == "-":
         return _parse_rows(sys.stdin, column)
     with open(source, encoding="utf-8", newline="") as fh:

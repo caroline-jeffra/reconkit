@@ -8,6 +8,7 @@ from reconkit.core.models import Outcome
 
 # --- live_check ------------------------------------------------------------
 
+
 @responses.activate
 def test_live_check_treats_any_answer_as_valid():
     # Reachability triage: a 404 host is still serving, so it is VALID.
@@ -17,7 +18,9 @@ def test_live_check_treats_any_answer_as_valid():
 
     outcomes = {
         r.domain: r.outcome
-        for r in live_check.check_live(["up.example", "notfound.example", "blocked.example"])
+        for r in live_check.check_live(
+            ["up.example", "notfound.example", "blocked.example"]
+        )
     }
     assert set(outcomes.values()) == {Outcome.VALID}
 
@@ -67,10 +70,12 @@ def test_live_check_returns_one_row_per_domain_in_order():
 
 # --- wp_detect -------------------------------------------------------------
 
+
 @responses.activate
 def test_wp_detect_json_content_type_is_valid():
     responses.get(
-        "https://wp.example/wp-json", json={"name": "site"},
+        "https://wp.example/wp-json",
+        json={"name": "site"},
         content_type="application/json",
     )
     (result,) = wp_detect.detect_wordpress(["wp.example"])
@@ -81,7 +86,8 @@ def test_wp_detect_json_content_type_is_valid():
 @responses.activate
 def test_wp_detect_accepts_json_content_type_with_charset():
     responses.get(
-        "https://wp.example/wp-json", body="{}",
+        "https://wp.example/wp-json",
+        body="{}",
         content_type="application/json; charset=UTF-8",
     )
     assert wp_detect.detect_wordpress(["wp.example"])[0].outcome is Outcome.VALID
@@ -89,7 +95,9 @@ def test_wp_detect_accepts_json_content_type_with_charset():
 
 @responses.activate
 def test_wp_detect_html_is_negative_and_reports_the_type():
-    responses.get("https://site.example/wp-json", body="<html>", content_type="text/html")
+    responses.get(
+        "https://site.example/wp-json", body="<html>", content_type="text/html"
+    )
     (result,) = wp_detect.detect_wordpress(["site.example"])
     assert result.outcome is Outcome.NEGATIVE
     assert result.detail.startswith("text/html")
@@ -97,7 +105,9 @@ def test_wp_detect_html_is_negative_and_reports_the_type():
 
 @responses.activate
 def test_wp_detect_probes_the_wp_json_endpoint():
-    responses.get("https://wp.example/wp-json", json={}, content_type="application/json")
+    responses.get(
+        "https://wp.example/wp-json", json={}, content_type="application/json"
+    )
     wp_detect.detect_wordpress(["wp.example"])
     assert responses.calls[0].request.url.endswith("/wp-json")
 
@@ -105,15 +115,21 @@ def test_wp_detect_probes_the_wp_json_endpoint():
 @responses.activate
 def test_wp_detect_uses_a_pinned_scheme():
     responses.get("http://wp.example/wp-json", json={}, content_type="application/json")
-    (result,) = wp_detect.detect_wordpress(["wp.example"], schemes={"wp.example": "http"})
+    (result,) = wp_detect.detect_wordpress(
+        ["wp.example"], schemes={"wp.example": "http"}
+    )
     assert result.scheme == "http"
     assert len(responses.calls) == 1
 
 
 @responses.activate
 def test_wp_detect_ignores_a_pin_meant_for_another_domain():
-    responses.get("https://wp.example/wp-json", json={}, content_type="application/json")
-    (result,) = wp_detect.detect_wordpress(["wp.example"], schemes={"other.example": "http"})
+    responses.get(
+        "https://wp.example/wp-json", json={}, content_type="application/json"
+    )
+    (result,) = wp_detect.detect_wordpress(
+        ["wp.example"], schemes={"other.example": "http"}
+    )
     assert result.scheme == "https"
 
 
@@ -123,6 +139,7 @@ def test_wp_detect_unreachable_host_is_error():
 
 
 # --- wp_detect: blocked / server-error statuses ----------------------------
+
 
 @responses.activate
 def test_wp_detect_auth_statuses_are_inconclusive():
@@ -154,6 +171,7 @@ def test_wp_detect_404_is_a_real_negative_verdict():
 
 # --- wp_users --------------------------------------------------------------
 
+
 @responses.activate
 def test_wp_users_exposed_authors_are_valid():
     responses.get(
@@ -162,7 +180,7 @@ def test_wp_users_exposed_authors_are_valid():
     )
     (result,) = wp_users.check_wp_users(["leaky.example"])
     assert result.outcome is Outcome.VALID
-    assert result.detail == "admin"                     # first name, for the CSV
+    assert result.detail == "admin"  # first name, for the CSV
     assert result.data == {"names": ["admin", "editor"]}
 
 
@@ -177,7 +195,7 @@ def test_wp_users_probes_the_users_endpoint():
 def test_wp_users_empty_list_is_negative():
     responses.get("https://empty.example/wp-json/wp/v2/users", json=[])
     (result,) = wp_users.check_wp_users(["empty.example"])
-    assert result.outcome is Outcome.NEGATIVE           # and no IndexError
+    assert result.outcome is Outcome.NEGATIVE  # and no IndexError
 
 
 @responses.activate
@@ -215,13 +233,15 @@ def test_wp_users_skips_non_dict_entries_when_collecting_names():
         json=[{"name": "admin"}, "junk", {"id": 2}],
     )
     (result,) = wp_users.check_wp_users(["mixed.example"])
-    assert result.data == {"names": ["admin", ""]}       # "junk" dropped, {"id": 2} -> ""
+    assert result.data == {"names": ["admin", ""]}  # "junk" dropped, {"id": 2} -> ""
 
 
 @responses.activate
 def test_wp_users_blocked_statuses_are_inconclusive():
     for i, status in enumerate((401, 403)):
-        responses.get(f"https://b{i}.example/wp-json/wp/v2/users", status=status, body="x")
+        responses.get(
+            f"https://b{i}.example/wp-json/wp/v2/users", status=status, body="x"
+        )
 
     results = wp_users.check_wp_users([f"b{i}.example" for i in range(2)])
     assert {r.outcome for r in results} == {Outcome.INCONCLUSIVE}
@@ -242,6 +262,7 @@ def test_wp_users_unreachable_host_is_error():
 
 
 # --- cloudflare_subdomains -------------------------------------------------
+
 
 def _zone_page(zones, page, total_pages):
     return {"result": zones, "result_info": {"page": page, "total_pages": total_pages}}
@@ -266,7 +287,9 @@ def test_cf_returns_one_row_per_a_record_tagged_with_its_zone():
 
 @responses.activate
 def test_cf_sends_the_bearer_token():
-    responses.get("https://api.cloudflare.com/client/v4/zones", json=_zone_page([], 1, 1))
+    responses.get(
+        "https://api.cloudflare.com/client/v4/zones", json=_zone_page([], 1, 1)
+    )
     cloudflare_subdomains.enumerate_subdomains("secret-token")
     assert responses.calls[0].request.headers["Authorization"] == "Bearer secret-token"
 
@@ -306,14 +329,18 @@ def test_cf_follows_zone_pagination():
 
 @responses.activate
 def test_cf_no_zones_yields_no_rows():
-    responses.get("https://api.cloudflare.com/client/v4/zones", json=_zone_page([], 1, 1))
+    responses.get(
+        "https://api.cloudflare.com/client/v4/zones", json=_zone_page([], 1, 1)
+    )
     assert cloudflare_subdomains.enumerate_subdomains("tok") == []
 
 
 @responses.activate
 def test_cf_raises_on_an_auth_failure():
     responses.get(
-        "https://api.cloudflare.com/client/v4/zones", status=403, json={"errors": ["bad token"]}
+        "https://api.cloudflare.com/client/v4/zones",
+        status=403,
+        json={"errors": ["bad token"]},
     )
     try:
         cloudflare_subdomains.enumerate_subdomains("bad")

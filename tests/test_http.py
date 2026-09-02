@@ -15,6 +15,7 @@ from reconkit.core.models import Outcome
 
 # --- make_session ----------------------------------------------------------
 
+
 def test_make_session_mounts_retrying_adapters_for_both_schemes():
     session = make_session(retries=3)
     for prefix in ("http://", "https://"):
@@ -28,6 +29,7 @@ def test_make_session_only_retries_get():
 
 
 # --- Fetch -----------------------------------------------------------------
+
 
 def test_fetch_answered_reflects_presence_of_a_response():
     assert not Fetch(error=ValueError()).answered
@@ -60,12 +62,15 @@ def test_fetch_final_url_blank_when_not_redirected():
 
 @responses.activate
 def test_fetch_final_url_set_when_redirected():
-    responses.get("https://a.example/", status=302, headers={"Location": "https://b.example/"})
+    responses.get(
+        "https://a.example/", status=302, headers={"Location": "https://b.example/"}
+    )
     responses.get("https://b.example/", status=200)
     assert fetch(make_session(), "a.example").final_url == "https://b.example/"
 
 
 # --- fetch: scheme order ---------------------------------------------------
+
 
 @responses.activate
 def test_fetch_prefers_https_then_falls_back_to_http():
@@ -85,7 +90,7 @@ def test_fetch_pinned_scheme_skips_the_other_one():
     responses.get("http://a.example/", status=200)
     got = fetch(make_session(), "a.example", scheme="http")
     assert got.scheme == "http"
-    assert len(responses.calls) == 1        # https never attempted
+    assert len(responses.calls) == 1  # https never attempted
 
 
 @responses.activate
@@ -104,7 +109,7 @@ def test_fetch_never_retries_the_same_scheme_twice():
     responses.get("http://a.example/", body=requests.ConnectionError("boom"))
 
     fetch(make_session(), "a.example", scheme="https")
-    assert len(responses.calls) == len(SCHEMES)     # pin deduped against SCHEMES
+    assert len(responses.calls) == len(SCHEMES)  # pin deduped against SCHEMES
 
 
 @responses.activate
@@ -140,6 +145,7 @@ def test_fetch_passes_the_timeout_through():
 
 # --- classify_failure ------------------------------------------------------
 
+
 def test_classify_failure_maps_timeout():
     got = Fetch(error=requests.exceptions.ConnectTimeout())
     result = classify_failure("a.example", got)
@@ -149,7 +155,9 @@ def test_classify_failure_maps_timeout():
 
 def test_classify_failure_maps_retry_exhaustion_to_inconclusive():
     # The server answered repeatedly, just never usefully — that is not silence.
-    result = classify_failure("a.example", Fetch(error=requests.exceptions.RetryError()))
+    result = classify_failure(
+        "a.example", Fetch(error=requests.exceptions.RetryError())
+    )
     assert result.outcome is Outcome.INCONCLUSIVE
     assert "retries exhausted" in result.detail
 

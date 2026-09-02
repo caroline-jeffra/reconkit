@@ -1,6 +1,5 @@
 """Tests for the shared result types."""
 
-
 from reconkit.core.models import ROW_FIELDS, Outcome, ProbeResult
 
 
@@ -40,5 +39,5 @@ def test_defaults_are_falsy_and_not_shared():
     a = ProbeResult("a.example", Outcome.VALID)
     b = ProbeResult("b.example", Outcome.VALID)
     a.data["x"] = 1
-    assert b.data == {}          # field(default_factory) — no shared mutable default
+    assert b.data == {}  # field(default_factory) — no shared mutable default
     assert (a.status, a.scheme, a.final_url, a.detail) == (None, "", "", "")

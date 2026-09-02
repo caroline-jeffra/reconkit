@@ -17,8 +17,8 @@ def detect_wordpress(
     timeout: float = DEFAULT_TIMEOUT,
     schemes: dict[str, str] | None = None,
 ) -> list[ProbeResult]:
-    """Checks for WP installation based on the default REST API endpoint presence/absence.
-    
+    """Check for a WP install via the default REST API endpoint.
+
     Possible outcomes are VALID, NEGATIVE, and INCONCLUSIVE.
     """
     session = make_session()
@@ -37,7 +37,9 @@ def detect_wordpress(
             "scheme": got.scheme,
             "final_url": got.final_url,
         }
-        if got.status in NO_VERDICT_STATUSES or (isinstance(got.status, int) and got.status >= 500):
+        if got.status in NO_VERDICT_STATUSES or (
+            isinstance(got.status, int) and got.status >= 500
+        ):
             results.append(
                 ProbeResult(domain, Outcome.INCONCLUSIVE, detail="blocked", **common)
             )
