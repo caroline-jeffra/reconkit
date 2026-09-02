@@ -6,6 +6,7 @@ import responses
 from reconkit.core.http import (
     RETRY_STATUSES,
     SCHEMES,
+    USER_AGENT,
     Fetch,
     classify_failure,
     fetch,
@@ -26,6 +27,23 @@ def test_make_session_mounts_retrying_adapters_for_both_schemes():
 
 def test_make_session_only_retries_get():
     assert make_session().get_adapter("https://").max_retries.allowed_methods == {"GET"}
+
+
+def test_make_session_identifies_itself():
+    """The UA names the tool and links to it, so log readers can identify us."""
+    ua = make_session().headers["User-Agent"]
+    assert ua == USER_AGENT
+    assert ua.startswith("reconkit/")
+    assert "github.com/caroline-jeffra/reconkit" in ua
+    assert "python-requests" not in ua
+
+
+@responses.activate
+def test_user_agent_is_sent_on_the_wire():
+    """Setting the header is not enough — it has to reach the server."""
+    responses.add(responses.GET, "https://a.example/probe", status=200)
+    make_session().get("https://a.example/probe")
+    assert responses.calls[0].request.headers["User-Agent"] == USER_AGENT
 
 
 # --- Fetch -----------------------------------------------------------------

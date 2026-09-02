@@ -8,9 +8,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .. import __version__
 from ..core.models import Outcome, ProbeResult
 
 DEFAULT_TIMEOUT = 5.0
+
+#: Sent on every request so an administrator reading their logs can tell what
+#: hit them and why. Identifying the tool is the clearest good-faith signal a
+#: probe can send; `python-requests/x.y` tells them nothing.
+USER_AGENT = f"reconkit/{__version__} (+https://github.com/caroline-jeffra/reconkit)"
 
 #: Statuses worth retrying: rate limiting and transient server-side faults.
 RETRY_STATUSES = (429, 500, 502, 503, 504)
@@ -34,6 +40,7 @@ def make_session(retries: int = 2, backoff: float = 0.3) -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
+    session.headers["User-Agent"] = USER_AGENT
     return session
 
 
