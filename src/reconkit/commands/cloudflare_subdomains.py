@@ -33,7 +33,9 @@ def _get_zones(session: requests.Session, api_token: str) -> list[dict]:
     return zones
 
 
-def _get_a_records(session: requests.Session, api_token: str, zone_id: str) -> list[str]:
+def _get_a_records(
+    session: requests.Session, api_token: str, zone_id: str
+) -> list[str]:
     resp = session.get(
         f"{BASE_URL}/zones/{zone_id}/dns_records",
         headers=_headers(api_token),
@@ -44,7 +46,10 @@ def _get_a_records(session: requests.Session, api_token: str, zone_id: str) -> l
 
 
 def enumerate_subdomains(api_token: str) -> list[ProbeResult]:
-    """Return one ProbeResult per subdomain; `domain` is the subdomain, data.zone is its zone."""
+    """Return one ProbeResult per subdomain.
+
+    `domain` is the subdomain; `data.zone` is the zone it belongs to.
+    """
     session = make_session()
     results: list[ProbeResult] = []
     for zone in _get_zones(session, api_token):

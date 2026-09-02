@@ -34,6 +34,7 @@ def _rows(path):
 
 # --- argument validation ---------------------------------------------------
 
+
 def test_no_args_is_help():
     assert "Usage" in runner.invoke(app, []).output
 
@@ -70,6 +71,7 @@ def test_live_check_still_requires_its_positional_argument(tmp_path):
 
 # --- standalone runs -------------------------------------------------------
 
+
 @responses.activate
 def test_live_check_writes_csv_and_summarises(tmp_path):
     responses.get("https://up.example/", status=200)
@@ -86,7 +88,9 @@ def test_live_check_writes_csv_and_summarises(tmp_path):
 
 @responses.activate
 def test_wp_detect_standalone_writes_its_own_stem(tmp_path):
-    responses.get("https://wp.example/wp-json", json={}, content_type="application/json")
+    responses.get(
+        "https://wp.example/wp-json", json={}, content_type="application/json"
+    )
     src = _domains_file(tmp_path, "wp.example")
 
     result = runner.invoke(app, ["wp-detect", str(src), "--out-dir", str(tmp_path)])
@@ -109,7 +113,9 @@ def test_json_format_option(tmp_path):
     responses.get("https://up.example/", status=200)
     src = _domains_file(tmp_path, "up.example")
 
-    runner.invoke(app, ["live-check", str(src), "--out-dir", str(tmp_path), "-f", "json"])
+    runner.invoke(
+        app, ["live-check", str(src), "--out-dir", str(tmp_path), "-f", "json"]
+    )
     (row,) = json.loads((tmp_path / "live_check.json").read_text(encoding="utf-8"))
     assert row["domain"] == "up.example"
 
@@ -139,13 +145,17 @@ def test_stdin_source(tmp_path):
 
 # --- chained runs (--from) -------------------------------------------------
 
+
 @responses.activate
 def test_wp_detect_from_upstream_reuses_scheme_and_skips_dead(tmp_path):
     responses.get("http://up.example/wp-json", json={}, content_type="application/json")
-    up = _upstream_file(tmp_path, [
-        {"domain": "up.example", "outcome": "valid", "scheme": "http"},
-        {"domain": "dead.example", "outcome": "error"},
-    ])
+    up = _upstream_file(
+        tmp_path,
+        [
+            {"domain": "up.example", "outcome": "valid", "scheme": "http"},
+            {"domain": "dead.example", "outcome": "error"},
+        ],
+    )
 
     result = runner.invoke(
         app, ["wp-detect", "--from", str(up), "--out-dir", str(tmp_path)]
@@ -156,16 +166,19 @@ def test_wp_detect_from_upstream_reuses_scheme_and_skips_dead(tmp_path):
     assert rows["up.example"]["outcome"] == "valid"
     assert rows["up.example"]["scheme"] == "http"
     assert rows["dead.example"]["outcome"] == "skipped"
-    assert len(responses.calls) == 1        # the dead host was never probed
+    assert len(responses.calls) == 1  # the dead host was never probed
 
 
 @responses.activate
 def test_wp_users_from_upstream_skips_dead(tmp_path):
     responses.get("https://up.example/wp-json/wp/v2/users", json=[{"name": "admin"}])
-    up = _upstream_file(tmp_path, [
-        {"domain": "up.example", "outcome": "valid"},
-        {"domain": "dead.example", "outcome": "timeout"},
-    ])
+    up = _upstream_file(
+        tmp_path,
+        [
+            {"domain": "up.example", "outcome": "valid"},
+            {"domain": "dead.example", "outcome": "timeout"},
+        ],
+    )
 
     result = runner.invoke(
         app, ["wp-users", "--from", str(up), "--out-dir", str(tmp_path)]
@@ -178,11 +191,14 @@ def test_wp_users_from_upstream_skips_dead(tmp_path):
 def test_chained_run_preserves_the_upstream_row_count(tmp_path):
     # Skipped rows are carried through so a chain never silently loses domains.
     responses.get("https://a.example/wp-json", json={}, content_type="application/json")
-    up = _upstream_file(tmp_path, [
-        {"domain": "a.example", "outcome": "valid"},
-        {"domain": "b.example", "outcome": "error"},
-        {"domain": "c.example", "outcome": "timeout"},
-    ])
+    up = _upstream_file(
+        tmp_path,
+        [
+            {"domain": "a.example", "outcome": "valid"},
+            {"domain": "b.example", "outcome": "error"},
+            {"domain": "c.example", "outcome": "timeout"},
+        ],
+    )
 
     result = runner.invoke(
         app, ["wp-detect", "--from", str(up), "--out-dir", str(tmp_path)]
@@ -192,6 +208,7 @@ def test_chained_run_preserves_the_upstream_row_count(tmp_path):
 
 
 # --- summary line ----------------------------------------------------------
+
 
 @responses.activate
 def test_summary_counts_are_sorted_and_totalled(tmp_path):
@@ -209,7 +226,10 @@ def test_out_dir_is_created(tmp_path):
     src = _domains_file(tmp_path, "a.example")
     out = tmp_path / "new" / "dir"
 
-    assert runner.invoke(app, ["live-check", str(src), "--out-dir", str(out)]).exit_code == 0
+    assert (
+        runner.invoke(app, ["live-check", str(src), "--out-dir", str(out)]).exit_code
+        == 0
+    )
     assert (out / "live_check.csv").exists()
 
 
@@ -217,8 +237,10 @@ def test_out_dir_is_created(tmp_path):
 def test_cf_subdomains_writes_results_with_a_token(tmp_path):
     responses.get(
         "https://api.cloudflare.com/client/v4/zones",
-        json={"result": [{"id": "z1", "name": "example.com"}],
-              "result_info": {"page": 1, "total_pages": 1}},
+        json={
+            "result": [{"id": "z1", "name": "example.com"}],
+            "result_info": {"page": 1, "total_pages": 1},
+        },
     )
     responses.get(
         "https://api.cloudflare.com/client/v4/zones/z1/dns_records",

@@ -13,20 +13,22 @@ from .core.models import ProbeResult
 app = typer.Typer(help="A small toolkit of web-recon commands.", no_args_is_help=True)
 
 FormatOpt = typer.Option("csv", "--format", "-f", help="Output format: csv or json.")
-OutDirOpt = typer.Option("results", "--out-dir", "-o", help="Directory for result files.")
+OutDirOpt = typer.Option(
+    "results", "--out-dir", "-o", help="Directory for result files."
+)
 FromOpt = typer.Option(
     None,
     "--from",
     help="Chain from a previous result CSV: reuses the discovered scheme and "
-        "skips domains that were unreachable. Omit to probe a plain domain list.",
+    "skips domains that were unreachable. Omit to probe a plain domain list.",
 )
 
 
 def _resolve_input(
     source: Optional[str], from_csv: Optional[str], column: int
-) -> tuple[list[str], dict[str,str], list[ProbeResult]]:
+) -> tuple[list[str], dict[str, str], list[ProbeResult]]:
     """Return (domains, schemes, carried-through SKIPPED rows).
-    
+
     Standalone is the default. Without --from, schemes is empty and every
     domain gets normal HTTPS->HTTP fallback.
     """
@@ -63,7 +65,9 @@ def live_check_cmd(
 
 @app.command("wp-detect")
 def wp_detect_cmd(
-    source: Optional[str] = typer.Argument(None, help="CSV of domains, or '-' for stdin."),
+    source: Optional[str] = typer.Argument(
+        None, help="CSV of domains, or '-' for stdin."
+    ),
     from_csv: Optional[str] = FromOpt,
     column: int = typer.Option(0),
     out_dir: str = OutDirOpt,
@@ -77,7 +81,9 @@ def wp_detect_cmd(
 
 @app.command("wp-users")
 def wp_users_cmd(
-    source: Optional[str] = typer.Argument(None, help="CSV of domains, or '-' for stdin."),
+    source: Optional[str] = typer.Argument(
+        None, help="CSV of domains, or '-' for stdin."
+    ),
     from_csv: Optional[str] = FromOpt,
     column: int = typer.Option(0),
     out_dir: str = OutDirOpt,
@@ -102,9 +108,7 @@ def cf_subdomains_cmd(
 ) -> None:
     """Enumerate A-record subdomains across all zones in a Cloudflare account."""
     if not api_token:
-        raise typer.BadParameter(
-            "Provide --api-token or set CLOUDFLARE_API_TOKEN."
-        )
+        raise typer.BadParameter("Provide --api-token or set CLOUDFLARE_API_TOKEN.")
     results = cloudflare_subdomains.enumerate_subdomains(api_token)
     _emit(results, out_dir, "cf_subdomains", fmt)
 

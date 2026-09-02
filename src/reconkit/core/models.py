@@ -17,6 +17,7 @@ ROW_FIELDS: tuple[str, ...] = (
     "data",
 )
 
+
 class Outcome(str, Enum):
     """Why a probe ended the way it did.
 
@@ -25,27 +26,27 @@ class Outcome(str, Enum):
     is operational: a 403 will still be a 403 tomorrow, a timeout may not be.
     """
 
-    VALID = "valid"                 # condition met
-    NEGATIVE = "negative"           # answered, condition not met
-    INCONCLUSIVE = "inconclusive"   # answered, timed out
-    TIMEOUT = "timeout"             # no response, timed out
-    ERROR = "error"                 # no response, DNS/refused/TLS/redirect loop
-    SKIPPED = "skipped"             # not probed, upstream marked host as dead
+    VALID = "valid"  # condition met
+    NEGATIVE = "negative"  # answered, condition not met
+    INCONCLUSIVE = "inconclusive"  # answered, timed out
+    TIMEOUT = "timeout"  # no response, timed out
+    ERROR = "error"  # no response, DNS/refused/TLS/redirect loop
+    SKIPPED = "skipped"  # not probed, upstream marked host as dead
 
 
 @dataclass
 class ProbeResult:
     """One probe against one domain.
-    
+
     `domain` is always the bare domain, no scheme prefix.
     The scheme that is actually answered is recorded separately in `scheme`"""
 
     domain: str
     outcome: Outcome
     detail: str = ""
-    status: int | None = None   # No HTTP response = None
-    scheme: str = ""            # Either http or https depending on response
-    final_url: str = ""         # Only set when domain is redirected to another URL
+    status: int | None = None  # No HTTP response = None
+    scheme: str = ""  # Either http or https depending on response
+    final_url: str = ""  # Only set when domain is redirected to another URL
     data: dict[str, Any] = field(default_factory=dict)
 
     def to_row(self) -> dict[str, Any]:

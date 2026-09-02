@@ -15,10 +15,10 @@ from ..core.models import Outcome, ProbeResult
 def check_wp_users(
     domains: list[str],
     timeout: float = DEFAULT_TIMEOUT,
-    schemes: dict[str, str] | None = None
+    schemes: dict[str, str] | None = None,
 ) -> list[ProbeResult]:
     """Does /wp-json/wp/v2/users enumerate authors to an anonymous caller?
-    
+
     Possible outcomes are VALID, NEGATIVE, and INCONCLUSIVE.
     """
     session = make_session()
@@ -54,7 +54,9 @@ def check_wp_users(
         except ValueError as exc:
             # Body was not JSON
             results.append(
-                ProbeResult(domain, Outcome.NEGATIVE, detail=type(exc).__name__, **common)
+                ProbeResult(
+                    domain, Outcome.NEGATIVE, detail=type(exc).__name__, **common
+                )
             )
             continue
 
@@ -73,7 +75,10 @@ def check_wp_users(
             # A JSON error object; the application itself declined.
             results.append(
                 ProbeResult(
-                    domain, Outcome.NEGATIVE, detail=str(payload.get("code", "")), **common
+                    domain,
+                    Outcome.NEGATIVE,
+                    detail=str(payload.get("code", "")),
+                    **common,
                 )
             )
         else:

@@ -56,6 +56,7 @@ than mistaken for a negative.
 
 ```python
 from reconkit.commands.wp_detect import detect_wordpress
+
 results = detect_wordpress(["example.com"])
 ```
 

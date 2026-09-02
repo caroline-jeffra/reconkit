@@ -7,12 +7,11 @@ from ..core.models import Outcome, ProbeResult
 
 
 def check_live(
-    domains: list[str],
-    timeout: float = DEFAULT_TIMEOUT
+    domains: list[str], timeout: float = DEFAULT_TIMEOUT
 ) -> list[ProbeResult]:
     """Reachability triage: any HTTP answer means the site is working.
-    
-    This command asks whether a site is serving here. 
+
+    This command asks whether a site is serving here.
     A 403 or 503 host is responding, so it is VALID.
     This probe never returns INCONCLUSIVE.
     """

@@ -17,6 +17,7 @@ from reconkit.core.models import ROW_FIELDS, Outcome, ProbeResult
 
 # --- read_domains ----------------------------------------------------------
 
+
 def test_read_domains_one_per_row(tmp_path):
     src = tmp_path / "in.csv"
     src.write_text("a.example\nb.example\n")
@@ -49,6 +50,7 @@ def test_read_domains_reads_stdin_for_dash(monkeypatch):
 
 # --- read_upstream ---------------------------------------------------------
 
+
 def _write_upstream(path, rows):
     with open(path, "w", encoding="utf-8", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=ROW_FIELDS)
@@ -59,11 +61,14 @@ def _write_upstream(path, rows):
 
 def test_read_upstream_splits_live_from_dead(tmp_path):
     src = tmp_path / "live_check.csv"
-    _write_upstream(src, [
-        {"domain": "up.example", "outcome": "valid", "scheme": "https"},
-        {"domain": "dns.example", "outcome": "error"},
-        {"domain": "slow.example", "outcome": "timeout"},
-    ])
+    _write_upstream(
+        src,
+        [
+            {"domain": "up.example", "outcome": "valid", "scheme": "https"},
+            {"domain": "dns.example", "outcome": "error"},
+            {"domain": "slow.example", "outcome": "timeout"},
+        ],
+    )
     up = read_upstream(src)
     assert up.domains == ["up.example"]
     assert set(up.dead) == {"dns.example", "slow.example"}
@@ -71,23 +76,29 @@ def test_read_upstream_splits_live_from_dead(tmp_path):
 
 def test_read_upstream_carries_scheme_only_when_present(tmp_path):
     src = tmp_path / "live_check.csv"
-    _write_upstream(src, [
-        {"domain": "tls.example", "outcome": "valid", "scheme": "https"},
-        {"domain": "plain.example", "outcome": "valid", "scheme": "http"},
-        {"domain": "unknown.example", "outcome": "valid"},   # blank scheme
-    ])
+    _write_upstream(
+        src,
+        [
+            {"domain": "tls.example", "outcome": "valid", "scheme": "https"},
+            {"domain": "plain.example", "outcome": "valid", "scheme": "http"},
+            {"domain": "unknown.example", "outcome": "valid"},  # blank scheme
+        ],
+    )
     up = read_upstream(src)
     assert up.schemes == {"tls.example": "https", "plain.example": "http"}
-    assert "unknown.example" in up.domains       # still probed, just unpinned
+    assert "unknown.example" in up.domains  # still probed, just unpinned
 
 
 def test_read_upstream_treats_non_dead_outcomes_as_probeable(tmp_path):
     # Only ERROR/TIMEOUT are dead. An inconclusive or negative host is retried.
     src = tmp_path / "wp_detect.csv"
-    _write_upstream(src, [
-        {"domain": "blocked.example", "outcome": "inconclusive"},
-        {"domain": "notwp.example", "outcome": "negative"},
-    ])
+    _write_upstream(
+        src,
+        [
+            {"domain": "blocked.example", "outcome": "inconclusive"},
+            {"domain": "notwp.example", "outcome": "negative"},
+        ],
+    )
     up = read_upstream(src)
     assert up.domains == ["blocked.example", "notwp.example"]
     assert up.dead == {}
@@ -95,11 +106,14 @@ def test_read_upstream_treats_non_dead_outcomes_as_probeable(tmp_path):
 
 def test_read_upstream_ignores_rows_without_a_domain(tmp_path):
     src = tmp_path / "live_check.csv"
-    _write_upstream(src, [
-        {"domain": "", "outcome": "valid"},
-        {"domain": "   ", "outcome": "error"},
-        {"domain": "real.example", "outcome": "valid"},
-    ])
+    _write_upstream(
+        src,
+        [
+            {"domain": "", "outcome": "valid"},
+            {"domain": "   ", "outcome": "error"},
+            {"domain": "real.example", "outcome": "valid"},
+        ],
+    )
     up = read_upstream(src)
     assert up.domains == ["real.example"]
     assert up.dead == {}
@@ -124,6 +138,7 @@ def test_dead_outcomes_are_exactly_the_unanswered_ones():
 
 # --- Upstream.skipped_results ---------------------------------------------
 
+
 def test_skipped_results_builds_one_row_per_dead_domain():
     up = Upstream(
         domains=[],
@@ -142,6 +157,7 @@ def test_skipped_results_is_empty_when_nothing_died():
 
 
 # --- write_results ---------------------------------------------------------
+
 
 def test_write_results_csv_headers_and_values(tmp_path):
     results = [ProbeResult("a.example", Outcome.VALID, status=200, scheme="https")]
@@ -165,7 +181,9 @@ def test_write_results_csv_json_encodes_the_data_column(tmp_path):
 
 def test_write_results_csv_leaves_empty_data_blank(tmp_path):
     # Empty dict becomes "" rather than "{}" so the column reads cleanly.
-    path = write_results([ProbeResult("a.example", Outcome.VALID)], tmp_path, "out", "csv")
+    path = write_results(
+        [ProbeResult("a.example", Outcome.VALID)], tmp_path, "out", "csv"
+    )
     (row,) = list(csv.DictReader(path.read_text(encoding="utf-8").splitlines()))
     assert row["data"] == ""
 
@@ -175,7 +193,7 @@ def test_write_results_json_keeps_data_structured(tmp_path):
     path = write_results(results, tmp_path, "out", "json")
 
     (row,) = json.loads(path.read_text(encoding="utf-8"))
-    assert row["data"] == {"n": [1]}     # not a JSON string, unlike CSV
+    assert row["data"] == {"n": [1]}  # not a JSON string, unlike CSV
     assert row["status"] == 200
 
 

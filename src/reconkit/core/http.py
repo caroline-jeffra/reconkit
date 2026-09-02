@@ -36,10 +36,11 @@ def make_session(retries: int = 2, backoff: float = 0.3) -> requests.Session:
     session.mount("https://", adapter)
     return session
 
+
 @dataclass
 class Fetch:
     """The transport-level result of one probe, before any command-specific verdict.
-    
+
     Exactly one of `response` / `error` is set. `scheme` records which scheme
     actually answered so callers can report it without re-deriving it.
     """
@@ -74,7 +75,7 @@ def fetch(
     scheme: str | None = None,
 ) -> Fetch:
     """GET `domain`/`path`, trying HTTPS then HTTP.
-    
+
     `scheme` pins a single scheme, used when a previous `live-check` already
     discovered which one answers. A pinned scheme that fails still falls back
     as a cached scheme can go stale between runs.
@@ -111,4 +112,6 @@ def classify_failure(domain: str, fetch_result: Fetch) -> ProbeResult:
             Outcome.INCONCLUSIVE,
             detail=f"retries exhausted on {'/'.join(str(s) for s in RETRY_STATUSES)}",
         )
-    return ProbeResult(domain, Outcome.ERROR, detail=type(exc).__name__ if exc else "no response")
+    return ProbeResult(
+        domain, Outcome.ERROR, detail=type(exc).__name__ if exc else "no response"
+    )
