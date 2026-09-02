@@ -30,6 +30,21 @@ reconkit = "reconkit.cli:app"
 dev = [
     "pytest>=8",
     "responses>=0.25",
+    "ruff>=0.16",
+]
+
+[tool.ruff]
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    # Typer resolves annotations at runtime, and `str | None` raises
+    # "RuntimeError: Type not yet supported" on Python 3.10 — our declared
+    # floor. The Optional[...] form in cli.py must stay.
+    "UP045",
+    "UP007",
 ]
 
 [build-system]

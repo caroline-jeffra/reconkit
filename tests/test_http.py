@@ -4,7 +4,6 @@ import requests
 import responses
 
 from reconkit.core.http import (
-    DEFAULT_TIMEOUT,
     RETRY_STATUSES,
     SCHEMES,
     Fetch,
@@ -13,7 +12,6 @@ from reconkit.core.http import (
     make_session,
 )
 from reconkit.core.models import Outcome
-
 
 # --- make_session ----------------------------------------------------------
 
