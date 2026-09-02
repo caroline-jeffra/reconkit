@@ -7,7 +7,27 @@ A small toolkit of web-reconnaissance commands, packaged as an installable
 CLI and an importable Python library. Give it a CSV of domains and it probes
 each one; results are written as CSV or JSON.
 
-## Commands
+## Authorized use only
+
+**Only point these commands at sites you own or have written permission to
+test.** Scanning systems without authorization is illegal in many
+jurisdictions, regardless of intent or how light the traffic is.
+
+The recommended way to stay on the right side of that line is to let
+Cloudflare decide what you are allowed to scan — see
+[Scan what you own](#scan-what-you-own) below. An API token only lists zones
+in your own account, so a domain list built that way is inherently
+ownership-scoped.
+
+What these commands do: unauthenticated `GET` requests to public endpoints,
+recording the status and whether a public API returned data. What they do not
+do: authenticate, log in, submit forms, guess credentials, exploit anything,
+or attempt to access non-public data. `wp-users` reads
+`/wp-json/wp/v2/users`, which WordPress serves publicly by default — it
+reports what an anonymous visitor could already see.
+
+That still makes real requests to real servers. You are responsible for
+having permission to send them.
 
 | Command          | What it does                                             |
 |------------------|----------------------------------------------------------|
@@ -44,6 +64,34 @@ authors through the REST API, so it returns a genuine positive.
 
 `cf-subdomains` takes no CSV — it reads zones from the Cloudflare API.
 
+## Scan what you own
+
+The recommended workflow starts from Cloudflare rather than a hand-written
+CSV. `cf-subdomains` enumerates the A records across every zone in your
+Cloudflare account, and its output feeds straight into the other commands
+with `--from`:
+
+```bash
+export CLOUDFLARE_API_TOKEN=xxxxx
+uv run reconkit cf-subdomains -o results                        # your zones
+uv run reconkit wp-detect --from results/cf_subdomains.csv -o results
+uv run reconkit wp-users  --from results/wp_detect.csv -o results
+```
+
+The token is what makes this the safe default: Cloudflare only returns zones
+belonging to your account, so the domain list cannot contain someone else's
+site. Nothing enforces this — the commands accept any CSV, and the library
+accepts any list of strings — but starting from your own zones means the
+question of authorization is settled before the first request goes out.
+
+A read-only token with `Zone:Read` and `DNS:Read` is sufficient.
+
+If your DNS is somewhere other than Cloudflare, build the CSV another way
+from a source you control — an inventory export or a registrar's zone
+list — rather than by hand, for the same reason.
+
+## Chaining any list
+
 Commands can be chained, feeding one command's results into the next with
 `--from`. Already-dead domains are skipped rather than re-probed:
 
@@ -69,6 +117,9 @@ results = detect_wordpress(["example.com"])
 
 `cf-subdomains` reads a token from `--api-token` or `$CLOUDFLARE_API_TOKEN`.
 It is used only at runtime and never written to disk.
+
+A read-only token is enough: `Zone:Read` (to list your zones) and `DNS:Read`
+(to read their A records). Nothing here writes to Cloudflare.
 
 ```bash
 CLOUDFLARE_API_TOKEN=xxxxx uv run reconkit cf-subdomains -o results
