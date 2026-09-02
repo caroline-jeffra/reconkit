@@ -105,6 +105,28 @@ These examples probe live third-party sites. Hosts that are hit repeatedly in
 quick succession may rate-limit, which is reported as `inconclusive` rather
 than mistaken for a negative.
 
+## Request behaviour
+
+Worth knowing before pointing this at a long list:
+
+- **One request at a time.** Domains are probed sequentially, never in
+  parallel, and each command sends one request per domain (two if the first
+  scheme fails and it falls back).
+- **No delay between domains.** A long list becomes a steady stream of
+  requests. Nothing here is throttled, so if you are scanning a few hundred
+  domains that share infrastructure, consider splitting the list.
+- **429 is respected, not ignored.** Rate-limit and transient 5xx responses
+  are retried twice with exponential backoff. If the limit persists, the
+  domain is reported `inconclusive` rather than being recorded as a negative
+  result — a throttled site is an unknown, not a clean one.
+- **Every request identifies itself.** The `User-Agent` names the tool and
+  links to this repository, so an administrator reading their logs can see
+  what reached them and why:
+
+  ```
+  reconkit/0.1.0 (+https://github.com/caroline-jeffra/reconkit)
+  ```
+
 ## Use as a library
 
 ```python
