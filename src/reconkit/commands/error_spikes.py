@@ -53,10 +53,11 @@ MAX_SAMPLE_SCAN = 400
 QUOTA_RETRIES = 3
 QUOTA_BACKOFF_SECONDS = 20
 
-#: How far either side of the peak bucket to look for surrounding requests.
-#: The peak bucket itself is included, so the searched span is
-#: bucket_width + 2 * SAMPLE_SPAN_BUCKETS * bucket_width.
-SAMPLE_SPAN_BUCKETS = 2
+#: Minutes either side of the peak to search for surrounding requests.
+#: Deliberately independent of the alignment bucket width: the useful context
+#: for a spike is the few minutes around it, not a span that grows whenever
+#: someone widens --bucket-seconds.
+SAMPLE_SPAN_MINUTES = 5
 
 INSTALL_HINT = (
     "error-spikes needs the GCP client libraries. "
@@ -361,18 +362,24 @@ def _fetch(
 
 
 def sample_window(
-    spike: Spike, alignment_seconds: int, span_buckets: int = SAMPLE_SPAN_BUCKETS
+    spike: Spike,
+    alignment_seconds: int = 300,
+    span_minutes: int = SAMPLE_SPAN_MINUTES,
 ) -> tuple[dt.datetime, dt.datetime, dt.datetime]:
     """Return (start, centre, end) of the interval to sample around the peak.
 
     Centred on the peak bucket rather than the spike start, so a long spike
-    with a sharp peak samples the moment that matters. Clamped to the spike's
-    own extent only on the near side: context just before and after the spike
-    is often what explains it, so the window may overhang both ends.
+    with one sharp burst samples the moment that matters. The span is a fixed
+    number of minutes either side, so widening --bucket-seconds does not
+    silently drag in unrelated traffic.
+
+    `alignment_seconds` is accepted but unused; it is kept in the signature so
+    callers need not care whether the span is bucket-derived or absolute.
     """
-    width = dt.timedelta(seconds=alignment_seconds)
+    del alignment_seconds  # span is absolute, not bucket-derived
+    span = dt.timedelta(minutes=span_minutes)
     centre = spike.peak_at or spike.ended
-    return centre - width * (span_buckets + 1), centre, centre + width * span_buckets
+    return centre - span, centre, centre + span
 
 
 def collect_samples(
@@ -381,23 +388,25 @@ def collect_samples(
     *,
     limit: int,
     alignment_seconds: int = 300,
+    span_minutes: int = SAMPLE_SPAN_MINUTES,
     include_client_detail: bool = False,
     client: LogClient | None = None,
     sleep: Any = None,
 ) -> list[dict[str, Any]]:
     """Return up to `limit` samples straddling the peak of one spike.
 
-    Half the budget is spent walking backwards from the peak and half
-    forwards, so the result shows the run-up and the aftermath rather than
-    just whichever entries the API returned first. All status codes are
-    included.
+    Half the budget walks backwards from the peak and half forwards, so the
+    result shows the run-up and the aftermath rather than whichever entries
+    the API happened to return first. All status codes are included. With the
+    default `limit` of 150 this yields 75 requests either side, drawn from a
+    +/- 5 minute window around the peak.
     """
     _require_project(project)
     if limit <= 0:
         return []
     api = client or _load_log_client()
 
-    start, centre, end = sample_window(spike, alignment_seconds)
+    start, centre, end = sample_window(spike, span_minutes=span_minutes)
     before_budget = limit // 2
     after_budget = limit - before_budget
 
@@ -461,6 +470,7 @@ def find_spikes(
     threshold: int = 10,
     alignment_seconds: int = 300,
     samples: int = 0,
+    span_minutes: int = SAMPLE_SPAN_MINUTES,
     include_client_detail: bool = False,
     client: MetricClient | None = None,
     log_client: LogClient | None = None,
@@ -470,7 +480,8 @@ def find_spikes(
 
     `project` is mandatory and never defaulted. A project with no breaching
     bucket yields a single NEGATIVE row, so a clean scan stays distinguishable
-    from a scan that never ran. Request sampling is off unless `samples` > 0.
+    from a scan that never ran. Request sampling is off unless `samples` > 0;
+    when on, the budget is split evenly either side of each spike's peak.
     """
     _require_project(project)
 
@@ -491,7 +502,7 @@ def find_spikes(
                 project,
                 spike,
                 limit=samples,
-                alignment_seconds=alignment_seconds,
+                span_minutes=span_minutes,
                 include_client_detail=include_client_detail,
                 client=log_client,
             )
