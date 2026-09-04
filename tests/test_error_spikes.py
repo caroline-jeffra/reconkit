@@ -173,9 +173,7 @@ def test_cli_never_uses_the_adc_default_project(
     assert not called
 
 
-def test_cli_reads_project_from_env(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_cli_reads_project_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "env-proj")
     seen: dict[str, str] = {}
 
@@ -354,8 +352,14 @@ def test_log_filter_does_not_filter_on_status() -> None:
 def test_cli_rejects_client_detail_without_samples(tmp_path) -> None:
     res = CliRunner().invoke(
         app,
-        ["error-spikes", "-p", "x", "--include-client-detail",
-         "--out-dir", str(tmp_path)],
+        [
+            "error-spikes",
+            "-p",
+            "x",
+            "--include-client-detail",
+            "--out-dir",
+            str(tmp_path),
+        ],
     )
     assert res.exit_code != 0
     assert "only applies with --samples" in res.output
@@ -422,9 +426,7 @@ def test_window_does_not_widen_with_bucket_size() -> None:
 def test_span_minutes_reaches_the_log_filter() -> None:
     logs = DirectionalLogClient()
     spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
-    error_spikes.collect_samples(
-        "p", spike, limit=4, span_minutes=5, client=logs
-    )
+    error_spikes.collect_samples("p", spike, limit=4, span_minutes=5, client=logs)
     joined = " ".join(r["filter"] for r in logs.requests)
     assert (NOW - dt.timedelta(minutes=5)).isoformat() in joined
     assert (NOW + dt.timedelta(minutes=5)).isoformat() in joined
