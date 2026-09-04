@@ -40,6 +40,12 @@ Issues = "https://github.com/caroline-jeffra/reconkit/issues"
 [project.scripts]
 reconkit = "reconkit.cli:app"
 
+[project.optional-dependencies]
+gcp = [
+    "google-cloud-logging>=3.16.3",
+    "google-cloud-monitoring>=2.31.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
