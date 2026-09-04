@@ -134,15 +134,19 @@ def error_spikes_cmd(
     samples: int = typer.Option(
         0,
         "--samples",
-        help="Sample up to N 5xx requests per spike from Cloud Logging. "
-        "0 (the default) reads no logs at all.",
+        help="Sample up to N requests per spike from Cloud Logging, split "
+        "evenly either side of the spike's peak. All status codes are "
+        "included, since the successful requests around a spike are often "
+        "what explain it. Try 300-400 for a detailed picture. 0 (the "
+        "default) reads no logs at all.",
     ),
     include_client_detail: bool = typer.Option(
         False,
         "--include-client-detail",
         help="Include client IP, user agent, referer and query string in "
-        "samples. Off by default: these identify people and client sites, "
-        "and the results file is written to disk.",
+        "samples. Off by default: these identify people and the pages they "
+        "were reading, and the results file is written to disk. The rest of "
+        "the request URL is always kept.",
     ),
     out_dir: str = OutDirOpt,
     fmt: str = FormatOpt,

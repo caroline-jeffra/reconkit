@@ -12,41 +12,60 @@ Default Credentials project. ADC resolves to whichever project the operator
 last configured in gcloud, which need not be the one under audit, and a wrong
 project returns plausible data for the wrong service.
 
-*Request samples are redacted by default.* Cloud Run access logs carry
-``remote_ip``, ``user_agent``, ``referer`` and a full ``request_url``
-including its query string. Writing those to a results file turns an audit
-artifact into a file of personal and client data, so the sample record keeps
-method, redacted path, status and latency, and drops the rest unless the
-caller explicitly opts in.
+*Samples are centred on the peak.* The interesting requests are the ones
+surrounding the worst moment of a spike, not the first N failures in the
+window, so sampling finds the peak bucket and walks outwards in both
+directions. All status codes are collected: a 200 served slowly, or a burst
+of asset requests, is often what explains the 5xx beside it.
+
+*Samples keep the request URL but drop the query string.* The full URL is the
+most diagnostic field in a Cloud Run access log and infrastructure, so scheme,
+host and path are kept. Query strings are not: they routinely carry tokens,
+reset keys, emails and session identifiers. Client IP, user agent and referer
+identify people and the pages they were reading, so those are dropped too.
+``--include-client-detail`` opts back in to all four.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from ..core.models import Outcome, ProbeResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterable
 
 #: Cloud Run request counts. Verified live 2026-09-04: metricKind DELTA,
 #: valueType INT64. The aligner must therefore be ALIGN_DELTA -- ALIGN_SUM
 #: also returns data, but silently wrong data.
 METRIC_TYPE = "run.googleapis.com/request_count"
 
-#: Hard ceiling on log entries read per spike, whatever --samples asks for.
-#: entries:list over a busy window is slow and paginates without bound.
-MAX_SAMPLE_SCAN = 500
+#: Hard ceiling on log entries read per spike per direction, whatever
+#: --samples asks for. entries:list paginates without bound, and the project
+#: read quota is 120 requests/minute, so this must stay bounded.
+MAX_SAMPLE_SCAN = 400
+
+#: Retries and backoff for the entries.list read quota (120/min/project).
+QUOTA_RETRIES = 3
+QUOTA_BACKOFF_SECONDS = 20
+
+#: How far either side of the peak bucket to look for surrounding requests.
+#: The peak bucket itself is included, so the searched span is
+#: bucket_width + 2 * SAMPLE_SPAN_BUCKETS * bucket_width.
+SAMPLE_SPAN_BUCKETS = 2
 
 INSTALL_HINT = (
     "error-spikes needs the GCP client libraries. "
     "Install them with: pip install 'reconkit[gcp]'"
 )
 
-#: Fields dropped from request samples unless the caller opts in.
+#: Fields dropped from request samples unless the caller opts in. The query
+#: string is in here because it carries tokens and personal identifiers; the
+#: rest of the URL is not sensitive and is always kept.
 SENSITIVE_FIELDS = ("remote_ip", "user_agent", "referer", "query")
 
 
@@ -90,6 +109,8 @@ class Spike:
     peak: int
     total: int
     buckets: int
+    #: End of the worst bucket. Sampling is centred here, not on `started`.
+    peak_at: dt.datetime | None = None
     samples: list[dict[str, Any]] = field(default_factory=list)
 
     @property
@@ -144,11 +165,16 @@ def build_metric_request(
 
 
 def build_log_filter(service: str, start: dt.datetime, end: dt.datetime) -> str:
-    """Return an entries:list filter for 5xx requests to one service."""
+    """Return an entries:list filter for one service over one interval.
+
+    Deliberately does not filter on status. The requests surrounding a spike
+    explain it, and most of those succeeded: a flood of asset requests or a
+    slow 200 is context that a 5xx-only filter throws away.
+    """
     return (
         'resource.type="cloud_run_revision" '
         f'AND resource.labels.service_name="{service}" '
-        "AND httpRequest.status>=500 "
+        "AND httpRequest.requestMethod!=\"\" "
         f'AND timestamp>="{start.isoformat()}" '
         f'AND timestamp<="{end.isoformat()}"'
     )
@@ -192,14 +218,16 @@ def group_spikes(
         if not run:
             return
         counts = [c for _, c in run]
+        peak_stamp, peak_count = max(run, key=lambda kv: kv[1])
         spikes.append(
             Spike(
                 service=service,
                 started=run[0][0] - width,
                 ended=run[-1][0],
-                peak=max(counts),
+                peak=peak_count,
                 total=sum(counts),
                 buckets=len(run),
+                peak_at=peak_stamp,
             )
         )
         run.clear()
@@ -218,24 +246,27 @@ def group_spikes(
 def redact_sample(entry: Any, *, include_client_detail: bool) -> dict[str, Any]:
     """Turn one log entry into a sample record.
 
-    By default the query string, client IP, user agent and referer are
-    dropped: they identify people and client sites, and an audit artifact
-    should not become a file of personal data.
+    The request URL is kept, minus its query string: the URL is the single
+    most diagnostic field in an access log, while the query string is where
+    tokens, reset keys and email addresses live. Client IP, user agent and
+    referer are dropped unless the caller opts in.
     """
     hr = getattr(entry, "http_request", None)
     url = getattr(hr, "request_url", "") or ""
     parts = urlsplit(url)
+    clean_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
     sample: dict[str, Any] = {
+        "timestamp": _timestamp_of(entry),
         "method": getattr(hr, "request_method", "") or "",
+        "url": clean_url,
         "path": parts.path or "",
         "status": int(getattr(hr, "status", 0) or 0),
         "latency": _latency_seconds(hr),
-        "timestamp": _as_datetime(getattr(entry, "timestamp", None)),
+        "protocol": getattr(hr, "protocol", "") or "",
+        "request_size": _int_or_none(getattr(hr, "request_size", None)),
+        "response_size": _int_or_none(getattr(hr, "response_size", None)),
+        "server_ip": getattr(hr, "server_ip", "") or "",
     }
-    if isinstance(sample["timestamp"], dt.datetime):
-        sample["timestamp"] = sample["timestamp"].isoformat()
-    else:
-        sample["timestamp"] = ""
     if include_client_detail:
         sample.update(
             {
@@ -246,6 +277,20 @@ def redact_sample(entry: Any, *, include_client_detail: bool) -> dict[str, Any]:
             }
         )
     return sample
+
+
+def _timestamp_of(entry: Any) -> str:
+    stamp = _as_datetime(getattr(entry, "timestamp", None))
+    return stamp.isoformat() if isinstance(stamp, dt.datetime) else ""
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _latency_seconds(hr: Any) -> float | None:
@@ -261,18 +306,73 @@ def _latency_seconds(hr: Any) -> float | None:
     return float(seconds) + float(nanos) / 1e9
 
 
-def _iter_entries(
-    api: LogClient, project: str, flt: str, limit: int
-) -> Iterator[Any]:
+def _is_quota_error(exc: BaseException) -> bool:
+    """True when an exception looks like the entries.list read-quota limit."""
+    text = str(exc).lower()
+    return "quota" in text or "resource_exhausted" in text or "429" in text
+
+
+def _fetch(
+    api: LogClient,
+    project: str,
+    flt: str,
+    limit: int,
+    order_by: str,
+    *,
+    sleep: Any = None,
+) -> list[Any]:
+    """Read at most `limit` entries in one direction, hard-capped.
+
+    Cloud Logging allows 120 entries.list reads per minute per project, and a
+    multi-spike scan paginates well past that, so a quota rejection is
+    expected rather than exceptional. Back off and retry a few times; give up
+    with an actionable message rather than a raw protobuf dump.
+    """
+    capped = min(limit, MAX_SAMPLE_SCAN)
+    if capped <= 0:
+        return []
     request = {
         "resource_names": [f"projects/{project}"],
         "filter": flt,
-        "page_size": min(limit, 100),
+        "order_by": order_by,
+        "page_size": min(capped, 100),
     }
-    for i, entry in enumerate(api.list_log_entries(request=request)):
-        if i >= min(limit, MAX_SAMPLE_SCAN):
-            return
-        yield entry
+    pause = sleep or time.sleep
+    last: BaseException | None = None
+    for attempt in range(QUOTA_RETRIES):
+        try:
+            out: list[Any] = []
+            for entry in api.list_log_entries(request=request):
+                out.append(entry)
+                if len(out) >= capped:
+                    break
+            return out
+        except Exception as exc:  # noqa: BLE001 - re-raised below
+            if not _is_quota_error(exc):
+                raise
+            last = exc
+            if attempt < QUOTA_RETRIES - 1:
+                pause(QUOTA_BACKOFF_SECONDS * (attempt + 1))
+    raise RuntimeError(
+        "Cloud Logging read quota exhausted (120 reads/minute per project). "
+        "Lower --samples, narrow --hours, or raise --threshold so fewer "
+        "spikes are sampled."
+    ) from last
+
+
+def sample_window(
+    spike: Spike, alignment_seconds: int, span_buckets: int = SAMPLE_SPAN_BUCKETS
+) -> tuple[dt.datetime, dt.datetime, dt.datetime]:
+    """Return (start, centre, end) of the interval to sample around the peak.
+
+    Centred on the peak bucket rather than the spike start, so a long spike
+    with a sharp peak samples the moment that matters. Clamped to the spike's
+    own extent only on the near side: context just before and after the spike
+    is often what explains it, so the window may overhang both ends.
+    """
+    width = dt.timedelta(seconds=alignment_seconds)
+    centre = spike.peak_at or spike.ended
+    return centre - width * (span_buckets + 1), centre, centre + width * span_buckets
 
 
 def collect_samples(
@@ -280,19 +380,51 @@ def collect_samples(
     spike: Spike,
     *,
     limit: int,
+    alignment_seconds: int = 300,
     include_client_detail: bool = False,
     client: LogClient | None = None,
+    sleep: Any = None,
 ) -> list[dict[str, Any]]:
-    """Return up to `limit` redacted request samples from one spike window."""
+    """Return up to `limit` samples straddling the peak of one spike.
+
+    Half the budget is spent walking backwards from the peak and half
+    forwards, so the result shows the run-up and the aftermath rather than
+    just whichever entries the API returned first. All status codes are
+    included.
+    """
     _require_project(project)
     if limit <= 0:
         return []
     api = client or _load_log_client()
-    flt = build_log_filter(spike.service, spike.started, spike.ended)
-    return [
+
+    start, centre, end = sample_window(spike, alignment_seconds)
+    before_budget = limit // 2
+    after_budget = limit - before_budget
+
+    before = _fetch(
+        api,
+        project,
+        build_log_filter(spike.service, start, centre),
+        before_budget,
+        "timestamp desc",
+        sleep=sleep,
+    )
+    after = _fetch(
+        api,
+        project,
+        build_log_filter(spike.service, centre, end),
+        after_budget,
+        "timestamp asc",
+        sleep=sleep,
+    )
+
+    entries = list(reversed(before)) + list(after)
+    samples = [
         redact_sample(e, include_client_detail=include_client_detail)
-        for e in _iter_entries(api, project, flt, limit)
+        for e in entries
     ]
+    samples.sort(key=lambda s: s["timestamp"])
+    return samples
 
 
 def _to_result(spike: Spike, project: str, threshold: int) -> ProbeResult:
@@ -304,6 +436,7 @@ def _to_result(spike: Spike, project: str, threshold: int) -> ProbeResult:
         "duration_minutes": round(spike.duration_minutes, 1),
         "buckets": spike.buckets,
         "peak_errors": spike.peak,
+        "peak_at": spike.peak_at.isoformat() if spike.peak_at else "",
         "total_errors": spike.total,
         "threshold": threshold,
     }
@@ -358,6 +491,7 @@ def find_spikes(
                 project,
                 spike,
                 limit=samples,
+                alignment_seconds=alignment_seconds,
                 include_client_detail=include_client_detail,
                 client=log_client,
             )
