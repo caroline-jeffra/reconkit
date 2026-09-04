@@ -477,12 +477,12 @@ def test_infrastructure_fields_are_kept() -> None:
     e.http_request.protocol = "HTTP/1.1"
     e.http_request.request_size = "2480"
     e.http_request.response_size = "417"
-    e.http_request.server_ip = "34.8.223.142"
+    e.http_request.server_ip = "203.0.113.1"
     s = error_spikes.redact_sample(e, include_client_detail=False)
     assert s["protocol"] == "HTTP/1.1"
     assert s["request_size"] == 2480
     assert s["response_size"] == 417
-    assert s["server_ip"] == "34.8.223.142"
+    assert s["server_ip"] == "203.0.113.1"
 
 
 def test_successful_requests_are_sampled_too() -> None:
