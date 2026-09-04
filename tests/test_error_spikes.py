@@ -332,19 +332,23 @@ def test_sample_limit_is_respected() -> None:
 
 
 def test_sample_scan_is_hard_capped() -> None:
+    """The cap is per direction, so a two-sided fetch tops out at 2x."""
     logs = StubLogClient(5000)
-    spike = error_spikes.Spike("api", NOW, NOW, 1, 1, 1)
-    got = error_spikes.collect_samples(
-        "p", spike, limit=10_000, client=logs
-    )
-    assert len(got) == error_spikes.MAX_SAMPLE_SCAN
+    spike = error_spikes.Spike("api", NOW, NOW, 1, 1, 1, peak_at=NOW)
+    got = error_spikes.collect_samples("p", spike, limit=10_000, client=logs)
+    assert len(got) == error_spikes.MAX_SAMPLE_SCAN * 2
 
 
 def test_log_filter_scopes_to_service_and_window() -> None:
     f = error_spikes.build_log_filter("api", NOW, NOW + dt.timedelta(minutes=5))
     assert 'resource.labels.service_name="api"' in f
-    assert "httpRequest.status>=500" in f
     assert "timestamp>=" in f and "timestamp<=" in f
+
+
+def test_log_filter_does_not_filter_on_status() -> None:
+    """Successful requests around a spike are context, not noise."""
+    f = error_spikes.build_log_filter("api", NOW, NOW + dt.timedelta(minutes=5))
+    assert "status" not in f
 
 
 def test_cli_rejects_client_detail_without_samples(tmp_path) -> None:
@@ -355,3 +359,160 @@ def test_cli_rejects_client_detail_without_samples(tmp_path) -> None:
     )
     assert res.exit_code != 0
     assert "only applies with --samples" in res.output
+
+
+# ------------------------------------------------- peak-centred sampling
+
+
+class DirectionalLogClient:
+    """Returns distinct entries per direction so ordering can be asserted."""
+
+    def __init__(self) -> None:
+        self.requests: list[dict] = []
+
+    def list_log_entries(self, request):  # noqa: ANN001, ANN201
+        self.requests.append(request)
+        desc = "desc" in request.get("order_by", "")
+        base = -1 if desc else 1
+        out = []
+        for i in range(1, 4):
+            e = _Entry()
+            e.timestamp = NOW + dt.timedelta(seconds=base * i * 10)
+            out.append(e)
+        return out
+
+
+def test_peak_bucket_is_identified_not_the_last_bucket() -> None:
+    points = [(_mins(0), 12), (_mins(5), 99), (_mins(10), 15)]
+    spikes = error_spikes.group_spikes("api", points, 10, 300)
+    assert spikes[0].peak == 99
+    assert spikes[0].peak_at == _mins(5)
+
+
+def test_sample_window_is_centred_on_the_peak() -> None:
+    spike = error_spikes.Spike(
+        "api", _mins(0), _mins(30), 99, 200, 6, peak_at=_mins(20)
+    )
+    start, centre, end = error_spikes.sample_window(spike, 300, span_buckets=2)
+    assert centre == _mins(20)
+    assert start == _mins(20) - dt.timedelta(minutes=15)
+    assert end == _mins(20) + dt.timedelta(minutes=10)
+
+
+def test_samples_are_split_either_side_of_the_peak() -> None:
+    logs = DirectionalLogClient()
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    error_spikes.collect_samples("p", spike, limit=6, client=logs)
+    orders = [r["order_by"] for r in logs.requests]
+    assert "timestamp desc" in orders
+    assert "timestamp asc" in orders
+
+
+def test_budget_is_halved_between_directions() -> None:
+    logs = DirectionalLogClient()
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    error_spikes.collect_samples("p", spike, limit=300, client=logs)
+    sizes = sorted(r["page_size"] for r in logs.requests)
+    assert sizes == [100, 100]  # capped at 100 per page, both directions
+
+
+def test_samples_come_back_in_time_order() -> None:
+    logs = DirectionalLogClient()
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    got = error_spikes.collect_samples("p", spike, limit=6, client=logs)
+    stamps = [s["timestamp"] for s in got]
+    assert stamps == sorted(stamps)
+    assert len(got) == 6
+
+
+def test_url_is_kept_without_the_query_string() -> None:
+    s = error_spikes.redact_sample(_Entry(), include_client_detail=False)
+    assert s["url"] == "https://x.example/checkout"
+    assert "SECRET" not in s["url"]
+    assert "?" not in s["url"]
+
+
+def test_infrastructure_fields_are_kept() -> None:
+    e = _Entry()
+    e.http_request.protocol = "HTTP/1.1"
+    e.http_request.request_size = "2480"
+    e.http_request.response_size = "417"
+    e.http_request.server_ip = "34.8.223.142"
+    s = error_spikes.redact_sample(e, include_client_detail=False)
+    assert s["protocol"] == "HTTP/1.1"
+    assert s["request_size"] == 2480
+    assert s["response_size"] == 417
+    assert s["server_ip"] == "34.8.223.142"
+
+
+def test_successful_requests_are_sampled_too() -> None:
+    e = _Entry()
+    e.http_request.status = 200
+    s = error_spikes.redact_sample(e, include_client_detail=False)
+    assert s["status"] == 200
+
+
+def test_spike_without_peak_at_falls_back_to_end() -> None:
+    spike = error_spikes.Spike("api", _mins(0), _mins(10), 9, 9, 2)
+    _, centre, _ = error_spikes.sample_window(spike, 300)
+    assert centre == _mins(10)
+
+
+# ------------------------------------------------------------ quota handling
+
+
+class QuotaLogClient:
+    """Fails with a quota error `fail_times`, then succeeds."""
+
+    def __init__(self, fail_times: int) -> None:
+        self.fail_times = fail_times
+        self.calls = 0
+
+    def list_log_entries(self, request):  # noqa: ANN001, ANN201
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise RuntimeError("429 RESOURCE_EXHAUSTED: Quota exceeded")
+        return [_Entry()]
+
+
+def test_quota_error_is_retried_then_succeeds() -> None:
+    logs = QuotaLogClient(fail_times=1)
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    got = error_spikes.collect_samples(
+        "p", spike, limit=2, client=logs, sleep=lambda _s: None
+    )
+    assert logs.calls > 1
+    assert got
+
+
+def test_persistent_quota_error_gives_actionable_message() -> None:
+    logs = QuotaLogClient(fail_times=99)
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    with pytest.raises(RuntimeError, match="read quota exhausted"):
+        error_spikes.collect_samples(
+            "p", spike, limit=2, client=logs, sleep=lambda _s: None
+        )
+
+
+def test_non_quota_errors_are_not_retried() -> None:
+    class Boom:
+        calls = 0
+
+        def list_log_entries(self, request):  # noqa: ANN001, ANN201
+            Boom.calls += 1
+            raise ValueError("bad filter syntax")
+
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    with pytest.raises(ValueError, match="bad filter"):
+        error_spikes.collect_samples("p", spike, limit=2, client=Boom())
+    assert Boom.calls == 1
+
+
+def test_quota_message_reaches_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        raise RuntimeError("Cloud Logging read quota exhausted (120/min)")
+
+    monkeypatch.setattr(error_spikes, "find_spikes", _raise, raising=True)
+    res = CliRunner().invoke(app, ["error-spikes", "-p", "x", "--samples", "5"])
+    assert res.exit_code != 0
+    assert "quota exhausted" in res.output

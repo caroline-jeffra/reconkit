@@ -174,25 +174,48 @@ returns plausible-looking data for the wrong service.
 # spike timing and duration, no logs read at all
 uv run reconkit error-spikes --project my-proj --hours 48 --threshold 25
 
-# add up to 5 sample requests per spike
-uv run reconkit error-spikes -p my-proj --samples 5
+# add ~150 requests either side of each spike's peak
+uv run reconkit error-spikes -p my-proj --samples 300
 ```
 
 Consecutive breaching buckets collapse into one spike, so each row reports
-`started`, `ended`, `duration_minutes`, `peak_errors` and `total_errors`
-rather than one row per bucket.
+`started`, `ended`, `duration_minutes`, `peak_at`, `peak_errors` and
+`total_errors` rather than one row per bucket.
 
-### Request samples are redacted
+### Samples straddle the peak
 
-`--samples N` reads Cloud Logging. Those access logs contain client IPs, user
-agents, referers and full URLs with query strings. Samples therefore keep only
-**method, path, status, latency and timestamp** — the query string is stripped
-and the client fields are dropped.
+`--samples N` reads Cloud Logging around each spike. The budget is split
+evenly: half walking backwards from the peak bucket, half forwards, so
+`--samples 300` gives roughly 150 requests either side. Sampling is centred on
+the **peak**, not the spike's start, so a long spike with one sharp burst
+samples the moment that matters.
 
-`--include-client-detail` opts back in to IP, user agent, referer and query
-string. It requires `--samples` and prints a warning, because the results file
-then contains personal data and lands on disk. Leave it off unless you have a
-reason.
+**All status codes are collected.** The successful requests during a spike are
+usually what explain it — a flood of asset requests, or a 200 served in four
+seconds. Filtering to 5xx throws that context away.
+
+### What samples contain
+
+Each sample keeps the request URL, method, status, latency, protocol, request
+and response sizes, server IP, and timestamp. The URL is the most diagnostic
+field in an access log, so it is kept in full — **minus the query string**.
+
+Query strings are dropped because they carry tokens, reset keys, session IDs
+and email addresses. Client IP, user agent and referer are dropped too: they
+identify people and the pages they were reading.
+
+`--include-client-detail` opts back in to all four. It requires `--samples`
+and prints a warning, because the results file then contains personal data and
+lands on disk. Leave it off unless you have a specific reason, such as
+confirming a single client is causing the spike.
+
+### Read quota
+
+Cloud Logging allows **120 `entries.list` reads per minute per project**. A
+large `--samples` across several spikes will hit it. The command backs off and
+retries, so a big scan can take a few minutes; if the quota is still exhausted
+it says so and suggests lowering `--samples`, narrowing `--hours`, or raising
+`--threshold`.
 
 ## Design
 
