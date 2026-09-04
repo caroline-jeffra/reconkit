@@ -134,11 +134,16 @@ def error_spikes_cmd(
     samples: int = typer.Option(
         0,
         "--samples",
-        help="Sample up to N requests per spike from Cloud Logging, split "
-        "evenly either side of the spike's peak. All status codes are "
-        "included, since the successful requests around a spike are often "
-        "what explain it. Try 300-400 for a detailed picture. 0 (the "
-        "default) reads no logs at all.",
+        help="Total requests to sample per spike from Cloud Logging, split "
+        "evenly either side of the spike's peak: 150 gives 75 on each side. "
+        "All status codes are included, since the successful requests around "
+        "a spike are often what explain it. 0 (the default) reads no logs.",
+    ),
+    span_minutes: int = typer.Option(
+        error_spikes.SAMPLE_SPAN_MINUTES,
+        "--span-minutes",
+        help="How many minutes either side of the peak to sample from. "
+        "Default 5, giving a 10-minute window around the spike.",
     ),
     include_client_detail: bool = typer.Option(
         False,
@@ -168,6 +173,7 @@ def error_spikes_cmd(
             threshold=threshold,
             alignment_seconds=bucket_seconds,
             samples=samples,
+            span_minutes=span_minutes,
             include_client_detail=include_client_detail,
         )
     except RuntimeError as exc:

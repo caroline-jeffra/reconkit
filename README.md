@@ -174,8 +174,8 @@ returns plausible-looking data for the wrong service.
 # spike timing and duration, no logs read at all
 uv run reconkit error-spikes --project my-proj --hours 48 --threshold 25
 
-# add ~150 requests either side of each spike's peak
-uv run reconkit error-spikes -p my-proj --samples 300
+# 150 requests around each spike: 75 either side of the peak
+uv run reconkit error-spikes -p my-proj --samples 150
 ```
 
 Consecutive breaching buckets collapse into one spike, so each row reports
@@ -184,11 +184,16 @@ Consecutive breaching buckets collapse into one spike, so each row reports
 
 ### Samples straddle the peak
 
-`--samples N` reads Cloud Logging around each spike. The budget is split
-evenly: half walking backwards from the peak bucket, half forwards, so
-`--samples 300` gives roughly 150 requests either side. Sampling is centred on
-the **peak**, not the spike's start, so a long spike with one sharp burst
-samples the moment that matters.
+`--samples N` reads Cloud Logging around each spike. `N` is the **total** per
+spike, split evenly: `--samples 150` gives 75 requests before the peak and 75
+after. Sampling is centred on the **peak**, not the spike's start, so a long
+spike with one sharp burst samples the moment that matters.
+
+`--span-minutes` bounds how far either side to look, defaulting to 5 — a
+10-minute window around the spike. That span is absolute, not derived from
+`--bucket-seconds`, so widening the bucket does not silently pull in unrelated
+traffic. On a busy service the sample budget usually fills long before the
+window runs out, so the window acts as a ceiling rather than a target.
 
 **All status codes are collected.** The successful requests during a spike are
 usually what explain it — a flood of asset requests, or a 200 served in four

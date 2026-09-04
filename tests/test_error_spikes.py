@@ -393,10 +393,50 @@ def test_sample_window_is_centred_on_the_peak() -> None:
     spike = error_spikes.Spike(
         "api", _mins(0), _mins(30), 99, 200, 6, peak_at=_mins(20)
     )
-    start, centre, end = error_spikes.sample_window(spike, 300, span_buckets=2)
+    start, centre, end = error_spikes.sample_window(spike, span_minutes=5)
     assert centre == _mins(20)
-    assert start == _mins(20) - dt.timedelta(minutes=15)
-    assert end == _mins(20) + dt.timedelta(minutes=10)
+    assert start == _mins(15)
+    assert end == _mins(25)
+
+
+def test_window_defaults_to_ten_minutes_wide() -> None:
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    start, _, end = error_spikes.sample_window(spike)
+    assert (end - start) == dt.timedelta(minutes=10)
+
+
+def test_window_is_symmetric_around_the_peak() -> None:
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    start, centre, end = error_spikes.sample_window(spike, span_minutes=7)
+    assert centre - start == end - centre == dt.timedelta(minutes=7)
+
+
+def test_window_does_not_widen_with_bucket_size() -> None:
+    """A wider --bucket-seconds must not drag in unrelated traffic."""
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    narrow = error_spikes.sample_window(spike, alignment_seconds=60)
+    wide = error_spikes.sample_window(spike, alignment_seconds=3600)
+    assert narrow == wide
+
+
+def test_span_minutes_reaches_the_log_filter() -> None:
+    logs = DirectionalLogClient()
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    error_spikes.collect_samples(
+        "p", spike, limit=4, span_minutes=5, client=logs
+    )
+    joined = " ".join(r["filter"] for r in logs.requests)
+    assert (NOW - dt.timedelta(minutes=5)).isoformat() in joined
+    assert (NOW + dt.timedelta(minutes=5)).isoformat() in joined
+
+
+def test_150_samples_splits_75_each_side() -> None:
+    logs = DirectionalLogClient()
+    spike = error_spikes.Spike("api", NOW, NOW, 9, 9, 1, peak_at=NOW)
+    error_spikes.collect_samples("p", spike, limit=150, client=logs)
+    assert len(logs.requests) == 2
+    # page_size caps at 100, so assert the per-direction budget instead
+    assert all(r["page_size"] == 75 for r in logs.requests)
 
 
 def test_samples_are_split_either_side_of_the_peak() -> None:
