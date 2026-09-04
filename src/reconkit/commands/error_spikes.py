@@ -175,7 +175,7 @@ def build_log_filter(service: str, start: dt.datetime, end: dt.datetime) -> str:
     return (
         'resource.type="cloud_run_revision" '
         f'AND resource.labels.service_name="{service}" '
-        "AND httpRequest.requestMethod!=\"\" "
+        'AND httpRequest.requestMethod!="" '
         f'AND timestamp>="{start.isoformat()}" '
         f'AND timestamp<="{end.isoformat()}"'
     )
@@ -429,8 +429,7 @@ def collect_samples(
 
     entries = list(reversed(before)) + list(after)
     samples = [
-        redact_sample(e, include_client_detail=include_client_detail)
-        for e in entries
+        redact_sample(e, include_client_detail=include_client_detail) for e in entries
     ]
     samples.sort(key=lambda s: s["timestamp"])
     return samples
@@ -456,8 +455,7 @@ def _to_result(spike: Spike, project: str, threshold: int) -> ProbeResult:
         spike.service,
         Outcome.VALID,
         detail=(
-            f"{spike.total} 5xx over {spike.duration_minutes:.0f}m "
-            f"(peak {spike.peak})"
+            f"{spike.total} 5xx over {spike.duration_minutes:.0f}m (peak {spike.peak})"
         ),
         data=data,
     )

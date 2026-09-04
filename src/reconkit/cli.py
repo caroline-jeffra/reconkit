@@ -128,9 +128,7 @@ def error_spikes_cmd(
     threshold: int = typer.Option(
         10, help="Minimum 5xx responses in one bucket to count as a spike."
     ),
-    bucket_seconds: int = typer.Option(
-        300, help="Alignment bucket width, in seconds."
-    ),
+    bucket_seconds: int = typer.Option(300, help="Alignment bucket width, in seconds."),
     samples: int = typer.Option(
         0,
         "--samples",
