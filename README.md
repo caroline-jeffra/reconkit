@@ -39,6 +39,7 @@ site's owner — this repository is not a disclosure channel for third parties.
 | `wp-detect`      | Is it running WordPress? (probes `/wp-json`)             |
 | `wp-users`       | Does the WP REST API leak usernames?                     |
 | `cf-subdomains`  | Enumerate A-record subdomains from a Cloudflare account  |
+| `error-spikes`   | Find historical Cloud Run 5xx spikes in a GCP project    |
 
 ## Install & run (uv)
 
@@ -150,6 +151,48 @@ A read-only token is enough: `Zone:Read` (to list your zones) and `DNS:Read`
 ```bash
 CLOUDFLARE_API_TOKEN=xxxxx uv run reconkit cf-subdomains -o results
 ```
+
+## GCP auth (error-spikes)
+
+`error-spikes` is standalone data collection: it takes no domain list and
+reads Cloud Monitoring, not HTTP. It needs the optional extra and Application
+Default Credentials.
+
+```bash
+uv sync --extra gcp
+gcloud auth application-default login \
+  --scopes=https://www.googleapis.com/auth/monitoring.read,https://www.googleapis.com/auth/logging.read
+```
+
+**The project is always explicit.** Pass `--project` or set
+`$GOOGLE_CLOUD_PROJECT`. The command never falls back to the ADC default
+project, because ADC resolves to whichever project was last configured in
+gcloud — which is easily not the one you mean to audit, and a wrong project
+returns plausible-looking data for the wrong service.
+
+```bash
+# spike timing and duration, no logs read at all
+uv run reconkit error-spikes --project my-proj --hours 48 --threshold 25
+
+# add up to 5 sample requests per spike
+uv run reconkit error-spikes -p my-proj --samples 5
+```
+
+Consecutive breaching buckets collapse into one spike, so each row reports
+`started`, `ended`, `duration_minutes`, `peak_errors` and `total_errors`
+rather than one row per bucket.
+
+### Request samples are redacted
+
+`--samples N` reads Cloud Logging. Those access logs contain client IPs, user
+agents, referers and full URLs with query strings. Samples therefore keep only
+**method, path, status, latency and timestamp** — the query string is stripped
+and the client fields are dropped.
+
+`--include-client-detail` opts back in to IP, user agent, referer and query
+string. It requires `--samples` and prints a warning, because the results file
+then contains personal data and lands on disk. Leave it off unless you have a
+reason.
 
 ## Design
 
