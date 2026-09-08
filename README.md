@@ -67,6 +67,12 @@ full range of outcomes, so you can see a positive and a negative on first run.
 The `wp-users` list includes WordPress project sites that publish their
 authors through the REST API, so it returns a genuine positive.
 
+These lists depend on third-party sites continuing to behave as they do
+today. A site can disable REST API author exposure, move off WordPress, or
+go away entirely, and the example stops demonstrating what it was chosen to
+demonstrate — without anything here failing to tell you. If an example
+returns nothing interesting, check the site before suspecting the tool.
+
 `cf-subdomains` takes no CSV — it reads zones from the Cloudflare API.
 
 ## Scan what you own
